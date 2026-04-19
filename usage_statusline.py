@@ -134,11 +134,13 @@ def main():
 
     fh  = data.get("five_hour") or {}
     sd  = data.get("seven_day") or {}
+    ex  = data.get("extra_usage") or {}
 
-    fh_pct    = fh.get("utilization")
-    sd_pct    = sd.get("utilization")
-    fh_reset  = fmt_reset(fh.get("resets_at"), long=False)
-    sd_reset  = fmt_reset(sd.get("resets_at"), long=True)
+    fh_pct   = fh.get("utilization")
+    sd_pct   = sd.get("utilization")
+    ex_pct   = ex.get("utilization")
+    fh_reset = fmt_reset(fh.get("resets_at"), long=False)
+    sd_reset = fmt_reset(sd.get("resets_at"), long=True)
 
     fh_pct_display = f"{fh_pct:.0f}%" if fh_pct is not None else "n/a"
     sd_pct_display = f"{sd_pct:.0f}%" if sd_pct is not None else "n/a"
@@ -151,6 +153,22 @@ def main():
         f"{indicator(sd_pct)}  7-days {bar(sd_pct)} {sd_pct_display:>4}"
         f"  {sd_reset}"
     )
+
+    # Extra usage (pay-as-you-go top-up) — show only when enabled
+    if ex.get("is_enabled"):
+        ex_pct_display = f"{ex_pct:.0f}%" if ex_pct is not None else "n/a"
+        used   = ex.get("used_credits")
+        limit  = ex.get("monthly_limit")
+        curr   = ex.get("currency") or ""
+        credit_info = ""
+        if used is not None and limit is not None:
+            credit_info = f"  {used:.2f}/{limit:.2f} {curr}".rstrip()
+        print(
+            f"{indicator(ex_pct)}   Extra {bar(ex_pct)} {ex_pct_display:>4}"
+            f"{credit_info}"
+        )
+    else:
+        print(f"⚪   Extra {'[' + '─' * 20 + ']':22s}   disabled")
 
 
 if __name__ == "__main__":
