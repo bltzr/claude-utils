@@ -59,13 +59,11 @@ def get_session_cookies():
 
 # ── API call ───────────────────────────────────────────────────────────────────
 
-def fetch_usage(cookies):
+def _api_get(cookies, path):
     org_uuid = cookies.get("lastActiveOrg", "")
-    if not org_uuid:
-        return None
     cookie_header = "; ".join(f"{k}={v}" for k, v in cookies.items() if v)
     req = urllib.request.Request(
-        f"https://claude.ai/api/organizations/{org_uuid}/usage",
+        f"https://claude.ai/api/organizations/{org_uuid}{path}",
         headers={
             "Cookie": cookie_header,
             "User-Agent": (
@@ -78,6 +76,17 @@ def fetch_usage(cookies):
     )
     with urllib.request.urlopen(req, timeout=8) as r:
         return json.loads(r.read())
+
+
+def fetch_usage(cookies):
+    if not cookies.get("lastActiveOrg"):
+        return None, None
+    usage = _api_get(cookies, "/usage")
+    try:
+        prepaid = _api_get(cookies, "/prepaid/credits")
+    except Exception:
+        prepaid = None
+    return usage, prepaid
 
 
 # ── Display ────────────────────────────────────────────────────────────────────
@@ -122,8 +131,8 @@ def fmt_reset(resets_at_str, long=False):
 
 def main():
     try:
-        cookies = get_session_cookies()
-        data    = fetch_usage(cookies)
+        cookies       = get_session_cookies()
+        data, prepaid = fetch_usage(cookies)
     except Exception as e:
         print(f"⚠ usage unavailable: {e}")
         return
@@ -162,7 +171,10 @@ def main():
         curr   = ex.get("currency") or ""
         credit_info = ""
         if used is not None and limit is not None:
-            credit_info = f"  {used:.2f}/{limit:.2f} {curr}".rstrip()
+            balance_str = ""
+            if prepaid is not None and prepaid.get("amount") is not None:
+                balance_str = f" (Balance: {prepaid['amount']/100:.2f} €)"
+            credit_info = f"  {used/100:.2f}/{limit/100:.2f} €{balance_str}"
         print(
             f"{indicator(ex_pct)}   Extra {bar(ex_pct)} {ex_pct_display:>4}"
             f"{credit_info}"
