@@ -70,14 +70,33 @@ A status line script for [Claude Code](https://claude.ai/code) that displays you
 
 ---
 
-## session_resumers.py
+## session_name.py + session_resumers.py
 
-A hook script that automatically maintains double-clickable `.command` resume files for each Claude Code session. Place them in any folder and double-click to jump straight back into a session.
+Two cooperating hook scripts that manage double-clickable `.command` session resume files with human-friendly names.
 
-Each `.command` file contains:
-- The session title (from first user message)
-- A summary of what was done (updated on compaction)
-- A one-liner that `cd`s to the project and runs `claude --resume <id> --model <model>`
+```
+Claude ✦ AI Mapper and Status Line     ← terminal title bar
+```
+
+```
+~/dev/claude sessions/
+  ai-mapper-and-status-line.command    ← double-click to resume
+  granola-midi-addon.command
+  sequence-phase-1-data-model.command
+```
+
+Each `.command` file:
+- Has a short, inferred name (not the raw first prompt)
+- Shows a summary of what was done, updated automatically on compaction
+- `cd`s to the project folder and runs `claude --resume <id> --model <model>`
+
+### Features
+
+- **Auto-named** from the first user message using a stop-word-filtered heuristic
+- **Terminal title** set on every session start and updated on rename
+- **Renameable** — just tell Claude: *"rename this session to Granola MIDI Mapper"*
+- **Summary auto-updated** on `PostCompact` with the compaction summary
+- **Resume preserved** — Stop hook updates timestamp but never overwrites a good summary
 
 ### Requirements
 
@@ -87,54 +106,80 @@ Each `.command` file contains:
 
 ### Installation
 
-1. **Copy the script:**
+1. **Copy both scripts:**
 
    ```bash
+   cp session_name.py ~/.claude/session_name.py
    cp session_resumers.py ~/.claude/session_resumers.py
    ```
 
-2. **Choose a folder for your session files** (default: `~/dev/claude sessions`).
-   Edit `SESSIONS_DIR` at the top of `session_resumers.py` if you want a different location.
+2. **Choose a sessions folder** (default: `~/dev/claude sessions`).
+   Edit `SESSIONS_DIR` at the top of each script if you want a different location.
 
 3. **Add hooks to `~/.claude/settings.json`:**
 
    ```json
    {
      "hooks": {
+       "SessionStart": [
+         { "hooks": [{ "type": "command",
+             "command": "python3 /Users/YOUR_USERNAME/.claude/session_name.py",
+             "timeout": 5 }] }
+       ],
+       "UserPromptSubmit": [
+         { "hooks": [{ "type": "command",
+             "command": "python3 /Users/YOUR_USERNAME/.claude/session_name.py",
+             "timeout": 10 }] }
+       ],
        "Stop": [
-         {
-           "hooks": [
-             {
-               "type": "command",
-               "command": "python3 /Users/YOUR_USERNAME/.claude/session_resumers.py",
-               "timeout": 10
-             }
-           ]
-         }
+         { "hooks": [{ "type": "command",
+             "command": "python3 /Users/YOUR_USERNAME/.claude/session_resumers.py",
+             "timeout": 10 }] }
        ],
        "PostCompact": [
-         {
-           "hooks": [
-             {
-               "type": "command",
-               "command": "python3 /Users/YOUR_USERNAME/.claude/session_resumers.py",
-               "timeout": 10
-             }
-           ]
-         }
+         { "hooks": [{ "type": "command",
+             "command": "python3 /Users/YOUR_USERNAME/.claude/session_resumers.py",
+             "timeout": 10 }] }
        ]
      }
    }
    ```
 
-4. **Reload Claude Code** — open `/hooks` or restart.
+4. **Add rename instructions to `~/.claude/CLAUDE.md`** (create if missing):
+
+   ```markdown
+   ## Session Renaming
+   When asked to rename the session, run:
+   `python3 ~/.claude/session_name.py rename "The New Name"`
+   ```
+
+5. **Reload Claude Code** — open `/hooks` or restart.
 
 ### How it works
 
-- **On Stop**: creates or updates the `.command` file for the current session, preserving any existing summary.
-- **On PostCompact**: rewrites the summary block with the compaction summary (the most complete description of what happened).
-- File names are slugified from the first user message.
-- If you already have sessions, run the script once per session to back-fill:
-  ```bash
-  echo '{"session_id": "YOUR_SESSION_ID"}' | python3 ~/.claude/session_resumers.py
-  ```
+| Hook | Script | Action |
+|------|--------|--------|
+| `SessionStart` | session_name.py | Restore terminal title from stored name |
+| `UserPromptSubmit` | session_name.py | On first message: infer name, set title, create `.command` |
+| `Stop` | session_resumers.py | Update `.command` timestamp; preserve existing summary |
+| `PostCompact` | session_resumers.py | Replace summary with compaction summary |
+
+### Renaming a session
+
+Tell Claude: *"rename this session to My Better Name"*
+
+Or from the terminal:
+```bash
+python3 ~/.claude/session_name.py rename "My Better Name"
+```
+
+### Back-filling existing sessions
+
+```bash
+# List all session IDs
+ls ~/.claude/projects/**/*.jsonl
+
+# Name a specific session
+echo '{"session_id":"YOUR_ID","hook_event_name":"UserPromptSubmit","prompt":"what this session was about"}' \
+  | python3 ~/.claude/session_name.py
+```

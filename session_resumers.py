@@ -69,7 +69,22 @@ def analyze_session(jsonl_path):
     }
 
 
-def make_title(first_msg):
+def get_stored_name(session_id):
+    """Read the palatable name from session_name.py's registry, if available."""
+    try:
+        names_file = os.path.expanduser("~/.claude/session_names.json")
+        names = json.loads(open(names_file).read())
+        return names.get(session_id)
+    except Exception:
+        return None
+
+
+def make_title(first_msg, session_id=None):
+    """Use stored palatable name if available, else fall back to first message."""
+    if session_id:
+        stored = get_stored_name(session_id)
+        if stored:
+            return stored
     return first_msg.strip().split("\n")[0][:60].strip() or "session"
 
 
@@ -104,7 +119,7 @@ def find_existing_script(session_id):
 
 def write_script(session_id, info, new_summary=None):
     os.makedirs(SESSIONS_DIR, exist_ok=True)
-    title = make_title(info["first_user_msg"])
+    title = make_title(info["first_user_msg"], session_id)
     slug = slugify(title)
     target = os.path.join(SESSIONS_DIR, f"{slug}.command")
 
