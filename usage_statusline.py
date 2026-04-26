@@ -193,7 +193,7 @@ def main():
     sd_pct_display = f"{sd_pct:.0f}%" if sd_pct is not None else "n/a"
 
     model_label = fmt_model(get_current_model())
-    model_suffix = f"  ⬡ {model_label}" if model_label else ""
+    model_suffix = f"          ⬡ {model_label}" if model_label else ""
 
     print(
         f"{indicator(fh_pct)} Session {bar(fh_pct)} {fh_pct_display:>4}"
