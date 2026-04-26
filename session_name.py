@@ -51,10 +51,21 @@ def save_names(names: dict):
 
 # ── Terminal title ─────────────────────────────────────────────────────────────
 
-def set_terminal_title(name: str):
+def fmt_model(model_id: str) -> str:
+    """Shorten model ID: claude-sonnet-4-6 → sonnet 4.6"""
+    import re
+    m = re.match(r"claude-(\w+)-(\d+)-(\d+)", model_id or "")
+    if m:
+        return f"{m.group(1)} {m.group(2)}.{m.group(3)}"
+    return model_id or ""
+
+def set_terminal_title(name: str, model: str = ""):
+    label = f"Claude ✦ {name}"
+    if model:
+        label += f"  [{fmt_model(model)}]"
     try:
         with open('/dev/tty', 'w') as tty:
-            tty.write(f'\033]0;Claude ✦ {name}\007')
+            tty.write(f'\033]0;{label}\007')
     except Exception:
         pass
 
@@ -198,8 +209,10 @@ def hook_mode(data: dict):
 
     if event == 'SessionStart':
         name = names.get(session_id)
+        jsonl = find_jsonl(session_id)
+        _, model = read_session_info(jsonl) if jsonl else (None, "")
         if name:
-            set_terminal_title(name)
+            set_terminal_title(name, model)
         return
 
     if event == 'UserPromptSubmit':
@@ -218,11 +231,11 @@ def hook_mode(data: dict):
 
         names[session_id] = name
         save_names(names)
-        set_terminal_title(name)
 
         jsonl = find_jsonl(session_id)
+        cwd, model = read_session_info(jsonl) if jsonl else (str(Path.home()), DEFAULT_MODEL)
+        set_terminal_title(name, model)
         if jsonl:
-            cwd, model = read_session_info(jsonl)
             write_command_file(session_id, name, cwd, model)
 
 # ── CLI modes ─────────────────────────────────────────────────────────────────
@@ -238,11 +251,11 @@ def cli_rename(new_name: str, session_id: str | None = None):
     names[session_id] = new_name
     save_names(names)
 
-    set_terminal_title(new_name)
-
     jsonl = find_jsonl(session_id)
+    cwd, model = read_session_info(jsonl) if jsonl else (str(Path.home()), DEFAULT_MODEL)
+    set_terminal_title(new_name, model)
+
     if jsonl:
-        cwd, model = read_session_info(jsonl)
         path = write_command_file(session_id, new_name, cwd, model)
         print(f"Renamed '{old_name}' → '{new_name}'")
         print(f"Script: {path}")

@@ -6,13 +6,14 @@ Decrypts session cookies from the Claude desktop app, then calls:
 
 Output: two progress bars (5-hour window + 7-day window) with reset times.
 """
-import json, os, shutil, sqlite3, subprocess, tempfile, time, urllib.request
+import glob, json, os, shutil, sqlite3, subprocess, tempfile, time, urllib.request
 from datetime import datetime, timezone
 from hashlib import pbkdf2_hmac
 
 COOKIES_DB = os.path.expanduser("~/Library/Application Support/Claude/Cookies")
 KEYCHAIN_SERVICE = "Claude Safe Storage"
 AES_IV = b" " * 16  # Chromium macOS AES-CBC IV
+PROJECTS_DIR = os.path.expanduser("~/.claude/projects")
 
 
 # ── Cookie decryption ──────────────────────────────────────────────────────────
@@ -89,6 +90,43 @@ def fetch_usage(cookies):
     return usage, prepaid
 
 
+# ── Current model ─────────────────────────────────────────────────────────────
+
+def get_current_model():
+    """Read model from the most recently active session JSONL."""
+    files = glob.glob(os.path.join(PROJECTS_DIR, "**", "*.jsonl"))
+    if not files:
+        return None
+    recent = max(files, key=os.path.getmtime)
+    model = None
+    try:
+        with open(recent) as f:
+            for line in f:
+                try:
+                    e = json.loads(line)
+                    if e.get("type") == "assistant":
+                        m = (e.get("message") or {}).get("model")
+                        if m:
+                            model = m
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return model
+
+def fmt_model(model_id):
+    """Shorten model ID to a compact label."""
+    if not model_id:
+        return ""
+    # claude-sonnet-4-6 → sonnet 4.6  |  claude-opus-4-7 → opus 4.7
+    import re
+    m = re.match(r"claude-(\w+)-(\d+)-(\d+)", model_id)
+    if m:
+        name, major, minor = m.group(1), m.group(2), m.group(3)
+        return f"{name} {major}.{minor}"
+    return model_id
+
+
 # ── Display ────────────────────────────────────────────────────────────────────
 
 def bar(pct, width=20):
@@ -154,9 +192,12 @@ def main():
     fh_pct_display = f"{fh_pct:.0f}%" if fh_pct is not None else "n/a"
     sd_pct_display = f"{sd_pct:.0f}%" if sd_pct is not None else "n/a"
 
+    model_label = fmt_model(get_current_model())
+    model_suffix = f"  ⬡ {model_label}" if model_label else ""
+
     print(
         f"{indicator(fh_pct)} Session {bar(fh_pct)} {fh_pct_display:>4}"
-        f"  {fh_reset}"
+        f"  {fh_reset}{model_suffix}"
     )
     print(
         f"{indicator(sd_pct)}  7-days {bar(sd_pct)} {sd_pct_display:>4}"
